@@ -14,7 +14,7 @@ Inspired by https://github.com/imfriendly/ToggleWebHelper
 
 ## Usage
 - Download the zip from this github (Click < > Code → Download ZIP)
-- Find the `exe` folder and double click launch.ps1
+- Go in the `exe` folder and run launch.ps1
 - Click the windows tray (up arrow |**^**| on the taskbar)
 
 
