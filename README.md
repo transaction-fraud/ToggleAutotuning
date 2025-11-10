@@ -25,3 +25,4 @@ Inspired by https://github.com/imfriendly/ToggleWebHelper
 
 ### TODO:
 - Convert to an actual exe
+- Keybind support
