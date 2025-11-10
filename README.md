@@ -1,7 +1,7 @@
 # Toggle Autotuning
 Toggle the Windows autotuning level in the tray.
 
-Inspired by https://github.com/imfriendly/ToggleWebHelper
+Inspired by https://github.com/imfriendly/ToggleWebHelper and FSOS Game Mode
 
 
 ## Features
@@ -13,9 +13,9 @@ Inspired by https://github.com/imfriendly/ToggleWebHelper
 
 
 ## Usage
-- Download ToggleAutotuning.bat <a href="https://raw.githubusercontent.com/transaction-fraud/ToggleAutotuning/refs/heads/main/ToggleAutotuning.bat">here</a>
-- Double click to run and give elevated permissions
-- Click the windows tray (up arrow (**^**) on the taskbar) and navigate to the system icon
+- Download ToggleAutotuning.bat <a href="https://downgit.github.io/#/home?url=https://github.com/transaction-fraud/ToggleAutotuning/blob/main/ToggleAutotuning.bat">here</a>
+- Unzip and double click to run and give elevated permissions
+- Click the windows tray after opening (up arrow (**^**) on the taskbar) and navigate to the system icon
 
 
 ## Prerequisites
@@ -24,5 +24,4 @@ Inspired by https://github.com/imfriendly/ToggleWebHelper
 
 
 ### TODO:
-- Convert to an actual exe
 - Keybind support
