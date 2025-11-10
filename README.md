@@ -13,8 +13,8 @@ Inspired by https://github.com/imfriendly/ToggleWebHelper
 
 
 ## Usage
-- Download the zip from this github (Click `< > Code` → Download ZIP)
-- Go in the `exe` folder and run `launch.ps1`
+- Download ToggleAutotuning.bat <a href="https://raw.githubusercontent.com/transaction-fraud/ToggleAutotuning/refs/heads/main/ToggleAutotuning.bat">here</a>
+- Double click to run and give elevated permissions
 - Click the windows tray (up arrow (**^**) on the taskbar) and navigate to the system icon
 
 
