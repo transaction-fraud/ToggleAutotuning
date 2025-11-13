@@ -1,74 +1,84 @@
 @echo off
-title ToggleAutotuning by @transaction-fraud
-setlocal
+setlocal EnableDelayedExpansion
 
-set "appDir=%ProgramData%\ToggleAutotuning"
-set "ps1File=%appDir%\toggle.ps1"
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -ArgumentList 'am_admin' -Verb RunAs"
+    exit /b
+)
 
-:: Create folder if missing
-if not exist "%appDir%" mkdir "%appDir%"
+set "TMPDIR=%TEMP%\ToggleAutotuning"
+set "MAIN_PS=%TMPDIR%\ToggleAutotuning.ps1"
+set "LAUNCH_PS=%TMPDIR%\launch.ps1"
 
-:: Create 
-(
-echo # ToggleAutotuning by @transaction-fraud
-echo
-echo
-echo $scriptPath = $MyInvocation.MyCommand.Definition
-echo
-echo
-echo if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
-echo ^    [Security.Principal.WindowsBuiltInRole] "Administrator")) {
-echo ^    Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File `"$scriptPath`"" -Verb RunAs
-echo ^    exit
-echo }
-echo
-echo
-echo if (-not (Get-ScheduledTask -TaskName "ToggleAutotuning" -ErrorAction SilentlyContinue)) {
-echo ^    Register-ScheduledTask -TaskName "ToggleAutotuning" ^
-        -Action (New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`"") ^
-        -Trigger (New-ScheduledTaskTrigger -AtLogOn) ^
+if not exist "%TMPDIR%" mkdir "%TMPDIR%"
+
+powershell -NoProfile -Command "Set-Content -LiteralPath '%MAIN_PS%' -Value @'
+# ToggleAutotuning by @transaction-fraud
+
+# Check for admin
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
+    [Security.Principal.WindowsBuiltInRole] \"Administrator\")) {
+    Start-Process powershell \"-ExecutionPolicy Bypass -File `\"$PSCommandPath`\"\" -Verb RunAs
+    exit
+}
+
+# Background item
+if (-not (Get-ScheduledTask -TaskName \"ToggleAutotuning\" -ErrorAction SilentlyContinue)) {
+    Register-ScheduledTask -TaskName \"ToggleAutotuning\" `
+        -Action (New-ScheduledTaskAction -Execute \"powershell.exe\" -Argument \"-WindowStyle Hidden -ExecutionPolicy Bypass -File `\"$PSScriptRoot\\launch.ps1`\"\") `
+        -Trigger (New-ScheduledTaskTrigger -AtLogOn) `
         -Principal (New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest)
-echo }
-echo
-echo
-echo Add-Type -AssemblyName System.Windows.Forms
-echo
-echo function Get-AutotuningState {
-echo ^    $line = netsh interface tcp show global ^| Select-String "Receive Window Auto-Tuning Level"
-echo ^    if ($line -match "normal") { return "normal" }
-echo ^    elseif ($line -match "disabled") { return "disabled" }
-echo ^    else { return "unknown" }
-echo }
-echo
-echo $state = Get-AutotuningState
-echo $notify = New-Object System.Windows.Forms.NotifyIcon
-echo $notify.Icon = [System.Drawing.SystemIcons]::Information
-echo $notify.Visible = $true
-echo $notify.Text = "Autotuning: $state"
-echo
-echo
-echo $notify.add_MouseClick({
-echo ^    $state = Get-AutotuningState
-echo ^    if ($state -eq "normal") {
-echo ^        Start-Process "netsh.exe" -ArgumentList "interface tcp set global autotuninglevel=disabled" -Verb RunAs -WindowStyle Hidden
-echo ^        $notify.Text = "Autotuning: disabled"
-echo ^        Write-Host "Autotuning: disabled"
-echo ^    } elseif ($state -eq "disabled") {
-echo ^        Start-Process "netsh.exe" -ArgumentList "interface tcp set global autotuninglevel=normal" -Verb RunAs -WindowStyle Hidden
-echo ^        $notify.Text = "Autotuning: normal"
-echo ^        Write-Host "Autotuning: normal"
-echo ^    }
-echo })
-echo
-echo
-echo $menu = New-Object System.Windows.Forms.ContextMenu
-echo $menuItem = New-Object System.Windows.Forms.MenuItem("Exit", { $notify.Dispose(); exit })
-echo $menu.MenuItems.Add($menuItem)
-echo $notify.ContextMenu = $menu
-echo
-echo [System.Windows.Forms.Application]::Run()
-) > "%ps1File%"
+}
 
-:: Run 
-powershell -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "%ps1File%"
+Add-Type -AssemblyName System.Windows.Forms
+
+function Get-AutotuningState {
+    $line = netsh interface tcp show global | Select-String \"Receive Window Auto-Tuning Level\"
+    if ($line -match \"normal\") { return \"normal\" }
+    elseif ($line -match \"disabled\") { return \"disabled\" }
+    else { return \"unknown\" }
+}
+
+$state = Get-AutotuningState
+
+# Tray icon
+$notify = New-Object System.Windows.Forms.NotifyIcon
+$notify.Icon = [System.Drawing.SystemIcons]::Information
+$notify.Visible = $true
+$notify.Text = \"Autotuning: $state\"
+
+# Toggle on click
+$notify.add_MouseClick({
+    $state = Get-AutotuningState
+    if ($state -eq \"normal\") {
+        Start-Process \"netsh.exe\" -ArgumentList \"interface tcp set global autotuninglevel=disabled\" -Verb RunAs -WindowStyle Hidden
+        $notify.Text = \"Autotuning: disabled\"
+        Write-Host \"Autotuning: disabled\"
+    } elseif ($state -eq \"disabled\") {
+        Start-Process \"netsh.exe\" -ArgumentList \"interface tcp set global autotuninglevel=normal\" -Verb RunAs -WindowStyle Hidden
+        $notify.Text = \"Autotuning: normal\"
+        Write-Host \"Autotuning: normal\"
+    }
+})
+
+# Right-click menu
+$menu = New-Object System.Windows.Forms.ContextMenu
+$menuItem = New-Object System.Windows.Forms.MenuItem(\"Exit\", { $notify.Dispose(); exit })
+$menu.MenuItems.Add($menuItem)
+$notify.ContextMenu = $menu
+
+# Keep alive
+[System.Windows.Forms.Application]::Run()
+'@ -Encoding UTF8"
+
+powershell -NoProfile -Command "Set-Content -LiteralPath '%LAUNCH_PS%' -Value @'
+# launch.ps1 - starts ToggleAutotuning.ps1 hidden
+$script = Join-Path $PSScriptRoot 'ToggleAutotuning.ps1'
+Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `\"' + $script + '`\"' -WindowStyle Hidden
+'@ -Encoding UTF8"
+
+powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `\"%LAUNCH_PS%`\"' -Verb RunAs -WindowStyle Hidden"
+
+endlocal
 exit /b
