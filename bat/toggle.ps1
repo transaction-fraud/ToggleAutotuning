@@ -1,6 +1,18 @@
 # ToggleAutotuning by @transaction-fraud
 
-# Check for admin
+# Check instances
+$running = Get-Process -Name powershell | Where-Object {
+    $_.CommandLine -match [regex]::Escape($PSCommandPath) -and $_.Id -ne $PID
+}
+
+if ($running) { exit }
+
+$mutex = New-Object System.Threading.Mutex($false, "Global\ToggleAutotuningMutex")
+if (-not $mutex.WaitOne(0, $false)) {
+    exit
+}
+
+# Check admin
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
     [Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Start-Process powershell "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
@@ -8,15 +20,24 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 }
 
 # Background item
-if (-not (Get-ScheduledTask -TaskName "ToggleAutotuning" -ErrorAction SilentlyContinue)) {
-    Register-ScheduledTask -TaskName "ToggleAutotuning" `
-        -Action (New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PSScriptRoot\launch.ps1`"") `
-        -Trigger (New-ScheduledTaskTrigger -AtLogOn) `
-        -Principal (New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest)
+$existingTask = Get-ScheduledTask -TaskName "ToggleAutotuning" -ErrorAction SilentlyContinue
+if ($existingTask) {
+    # Check the action path
+    if ($existingTask.Actions.Execute -notmatch "toggle.ps1") {
+        Unregister-ScheduledTask -TaskName "ToggleAutotuning" -Confirm:$false
+        $existingTask = $null
+    }
 }
 
-Add-Type -AssemblyName System.Windows.Forms
+if (-not $existingTask) {
+    Register-ScheduledTask -TaskName "ToggleAutotuning" `
+    -Action (New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\toggle.ps1`"") `
+    -Trigger (New-ScheduledTaskTrigger -AtLogOn) `
+    -Principal (New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest)
+}
 
+
+Add-Type -AssemblyName System.Windows.Forms
 
 function Get-AutotuningState {
     $line = netsh interface tcp show global | Select-String "Receive Window Auto-Tuning Level"
