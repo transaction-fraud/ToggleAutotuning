@@ -13,7 +13,7 @@ Inspired by https://github.com/imfriendly/ToggleWebHelper and FSOS Game Mode
 
 
 ## Usage
-- Download ``ToggleAutotuning.bat`` <a href="https://downgit.github.io/#/home?url=https://github.com/transaction-fraud/ToggleAutotuning/blob/main/ToggleAutotuning.bat">here</a>
+- Download ``ToggleAutotuning.bat`` <a href="https://downgit.github.io/#/home?url=https://github.com/transaction-fraud/ToggleAutotuning/tree/main/bat">here</a>
 - Unzip and double click to run and give elevated permissions
 - Click the windows tray after opening (up arrow (**^**) on the taskbar) and navigate to the system icon
 
