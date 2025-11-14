@@ -1,43 +1,54 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -ArgumentList 'am_admin' -Verb RunAs"
-    exit /b
-)
-
-set "TMPDIR=%TEMP%\ToggleAutotuning"
-set "MAIN_PS=%TMPDIR%\ToggleAutotuning.ps1"
-set "LAUNCH_PS=%TMPDIR%\launch.ps1"
-
-if not exist "%TMPDIR%" mkdir "%TMPDIR%"
-
-powershell -NoProfile -Command "Set-Content -LiteralPath '%MAIN_PS%' -Value @'
+powershell -NoProfile -Command "Set-Content -LiteralPath '%~dp0toggle.ps1' -Value @'
 # ToggleAutotuning by @transaction-fraud
 
-# Check for admin
+# Check instances
+$running = Get-Process -Name powershell | Where-Object {
+    $_.CommandLine -match [regex]::Escape($PSCommandPath) -and $_.Id -ne $PID
+}
+
+if ($running) { exit }
+
+$mutex = New-Object System.Threading.Mutex($false, "Global\ToggleAutotuningMutex")
+if (-not $mutex.WaitOne(0, $false)) {
+    # Another instance is running
+    exit
+}
+
+# Check admin
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
-    [Security.Principal.WindowsBuiltInRole] \"Administrator\")) {
-    Start-Process powershell \"-ExecutionPolicy Bypass -File `\"$PSCommandPath`\"\" -Verb RunAs
+    [Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Start-Process powershell "-ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
     exit
 }
 
 # Background item
-if (-not (Get-ScheduledTask -TaskName \"ToggleAutotuning\" -ErrorAction SilentlyContinue)) {
-    Register-ScheduledTask -TaskName \"ToggleAutotuning\" `
-        -Action (New-ScheduledTaskAction -Execute \"powershell.exe\" -Argument \"-WindowStyle Hidden -ExecutionPolicy Bypass -File `\"$PSScriptRoot\\launch.ps1`\"\") `
-        -Trigger (New-ScheduledTaskTrigger -AtLogOn) `
-        -Principal (New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest)
+$existingTask = Get-ScheduledTask -TaskName "ToggleAutotuning" -ErrorAction SilentlyContinue
+if ($existingTask) {
+    # Check the action path
+    if ($existingTask.Actions.Execute -notmatch "toggle.ps1") {
+        Unregister-ScheduledTask -TaskName "ToggleAutotuning" -Confirm:$false
+        $existingTask = $null
+    }
 }
+
+if (-not $existingTask) {
+    Register-ScheduledTask -TaskName "ToggleAutotuning" `
+    -Action (New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$PSScriptRoot\toggle.ps1`"") `
+    -Trigger (New-ScheduledTaskTrigger -AtLogOn) `
+    -Principal (New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest)
+}
+
 
 Add-Type -AssemblyName System.Windows.Forms
 
 function Get-AutotuningState {
-    $line = netsh interface tcp show global | Select-String \"Receive Window Auto-Tuning Level\"
-    if ($line -match \"normal\") { return \"normal\" }
-    elseif ($line -match \"disabled\") { return \"disabled\" }
-    else { return \"unknown\" }
+    $line = netsh interface tcp show global | Select-String "Receive Window Auto-Tuning Level"
+    if ($line -match "normal") { return "normal" }
+    elseif ($line -match "disabled") { return "disabled" }
+    else { return "unknown" }
 }
 
 $state = Get-AutotuningState
@@ -46,39 +57,31 @@ $state = Get-AutotuningState
 $notify = New-Object System.Windows.Forms.NotifyIcon
 $notify.Icon = [System.Drawing.SystemIcons]::Information
 $notify.Visible = $true
-$notify.Text = \"Autotuning: $state\"
+$notify.Text = "Autotuning: $state"
 
 # Toggle on click
 $notify.add_MouseClick({
     $state = Get-AutotuningState
-    if ($state -eq \"normal\") {
-        Start-Process \"netsh.exe\" -ArgumentList \"interface tcp set global autotuninglevel=disabled\" -Verb RunAs -WindowStyle Hidden
-        $notify.Text = \"Autotuning: disabled\"
-        Write-Host \"Autotuning: disabled\"
-    } elseif ($state -eq \"disabled\") {
-        Start-Process \"netsh.exe\" -ArgumentList \"interface tcp set global autotuninglevel=normal\" -Verb RunAs -WindowStyle Hidden
-        $notify.Text = \"Autotuning: normal\"
-        Write-Host \"Autotuning: normal\"
+    if ($state -eq "normal") {
+        Start-Process "netsh.exe" -ArgumentList "interface tcp set global autotuninglevel=disabled" -Verb RunAs -WindowStyle Hidden
+        $notify.Text = "Autotuning: disabled"
+        Write-Host "Autotuning: disabled"
+    } elseif ($state -eq "disabled") {
+        Start-Process "netsh.exe" -ArgumentList "interface tcp set global autotuninglevel=normal" -Verb RunAs -WindowStyle Hidden
+        $notify.Text = "Autotuning: normal"
+        Write-Host "Autotuning: normal"
     }
 })
 
 # Right-click menu
 $menu = New-Object System.Windows.Forms.ContextMenu
-$menuItem = New-Object System.Windows.Forms.MenuItem(\"Exit\", { $notify.Dispose(); exit })
+$menuItem = New-Object System.Windows.Forms.MenuItem("Exit", { $notify.Dispose(); exit })
 $menu.MenuItems.Add($menuItem)
 $notify.ContextMenu = $menu
 
 # Keep alive
 [System.Windows.Forms.Application]::Run()
+
 '@ -Encoding UTF8"
 
-powershell -NoProfile -Command "Set-Content -LiteralPath '%LAUNCH_PS%' -Value @'
-# launch.ps1 - starts ToggleAutotuning.ps1 hidden
-$script = Join-Path $PSScriptRoot 'ToggleAutotuning.ps1'
-Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `\"' + $script + '`\"' -WindowStyle Hidden
-'@ -Encoding UTF8"
-
-powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `\"%LAUNCH_PS%`\"' -Verb RunAs -WindowStyle Hidden"
-
-endlocal
-exit /b
+powershell -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "%~dp0toggle.ps1"
