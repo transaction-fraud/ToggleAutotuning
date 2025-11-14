@@ -13,7 +13,6 @@ if ($running) { exit }
 
 $mutex = New-Object System.Threading.Mutex($false, "Global\ToggleAutotuningMutex")
 if (-not $mutex.WaitOne(0, $false)) {
-    # Another instance is running
     exit
 }
 
